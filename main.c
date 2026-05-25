@@ -265,23 +265,61 @@ int execute_command(char *command, bool *running){
     return 0;
 }
 
+bool handle_condition(char line[MAX_COMMAND_LENGTH]){
+    // Get the condition part (e.g., "if 1 == 1")
+    char *condition = line + 3; // Skip "if "
+
+    // No ORs or ANDs
+    char *left = strtok(condition, " ");
+    char *op = strtok(NULL, " ");
+    char *right = strtok(NULL, " ");
+
+    switch(op[0]){
+        case '=':
+            if(strcmp(left, right) == 0) return true;
+            return false;
+            break;
+        case '!':
+            if(strcmp(left, right) != 0) return true;
+            return false;
+            break;
+        default:
+            printf("\033[1;31mUnsupported operator in condition: %s\033[0m\n", op);
+            return false;
+    }
+}
+
 // Interpret (WIP) and run a script file
-void run_script(const char *filename){
+void run_script(const char *filename, bool *running){
     FILE *file = fopen(filename, "r");
     if(!file) return;
 
     char line[MAX_COMMAND_LENGTH];
-    bool script_running = true; // Temporary flag for the script session
+    bool script_running = *running; // Temporary flag for the script session
 
     while(fgets(line, sizeof(line), file)){
         // 1. Clean the line
-        line[strcspn(line, "\r\n")] = 0;
+        line[strcspn(line, ";\n")] = 0; // We use ';' for end of a command
         
         // 2. Skip comments/empty
-        if(line[0] == '#' || line[0] == '\0') continue; 
+        if(line[0] == '#' || line[0] == '\0') continue;
 
-        // 3. Just pass the whole line to execute_command
-        // Don't strtok here! Let execute_command handle the parsing.
+        // Skip block terminators and shebangs
+        if(strcmp(line, "endif") == 0) continue;
+        if(strncmp(line, "#!", 2) == 0) continue;
+
+        // 3. Handle conditions and loops (WIP)
+        if(strncmp(line, "if ", 3) == 0){
+            if(!handle_condition(line)){
+                // Skip to the next "endif"
+                while(fgets(line, sizeof(line), file)){
+                    if(strncmp(line, "endif", 5) == 0) break;
+                }
+            }
+            continue;
+        }
+
+        // 4. Just pass the whole line to execute_command
         execute_command(line, &script_running);
     }
     fclose(file);
@@ -289,15 +327,17 @@ void run_script(const char *filename){
 
 int main(int argc, char **argv){
     // 1. Startup logic (.xxshrc)
+    bool running = true;
+    // bool nested = false; // To prevent infinite recursion in scripts
     char rc_path[256];
     snprintf(rc_path, sizeof(rc_path), "%s/.xxshrc", getenv("HOME"));
     if(access(rc_path, F_OK) != -1){
-        run_script(rc_path);
+        run_script(rc_path, &running);
     }
 
     // 2. SCRIPT MODE: Check if a script was passed as an argument
     if (argc > 1) {
-        run_script(argv[1]);
+        run_script(argv[1], &running);
         return 0; // Exit after running the script
     }
 
@@ -306,7 +346,6 @@ int main(int argc, char **argv){
     srand((unsigned int)time(NULL));
     
     char command[MAX_COMMAND_LENGTH];
-    bool running = true;
 
     while(running){
         printf("XX> ");
