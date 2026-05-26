@@ -325,6 +325,7 @@ bool handle_loop(char line[MAX_COMMAND_LENGTH]){
 typedef struct Loop{
     int depth;
     int start_line;
+    long file_pos;
 } Loop;
 
 // Interpret (WIP) and run a script file
@@ -387,8 +388,9 @@ void run_script(const char *filename, bool *running){
                     if(strncmp(line, "endloop", 7) == 0) break;
                 }
             }else{
-                loops[loop_count].depth = 1; // Start of a new loop
+                loops[loop_count].depth = loop_count; // Start of a new loop
                 loops[loop_count].start_line = line_counter; // Store the line number where the loop starts
+                loops[loop_count].file_pos = ftell(file); // Store the file position for the start of the loop
                 loop_count++;
                 loop_active = true;
             }
@@ -396,9 +398,9 @@ void run_script(const char *filename, bool *running){
         }
 
         if(loop_active && strncmp(line, "endloop", 7) == 0){
-            // Loops don't loop yet, WIP
-            loop_active = false;
-            loop_count--;
+            fprintf(DEBUG_LOG, "DEBUG: Going back to the beginning of the loop\n"); // Debug log
+            fseek(file, loops[loop_count - 1].file_pos, SEEK_SET); // Go back to the start of the loop
+            line_counter = loops[loop_count - 1].start_line; // Reset line counter to the start of the loop
             continue;
         }
 
