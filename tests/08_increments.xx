@@ -2,4 +2,8 @@ set y number = 0;
 
 loop y < 10
     increase y;
+    echo y;
 endloop;
+
+echo "decreasing";
+decrease y; echo y;

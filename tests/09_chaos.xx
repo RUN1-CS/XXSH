@@ -1,0 +1,7 @@
+set x number = 5 ;;;
+   increase      x;    
+if x==5 echo "No spaces handled";endif;
+echo "Testing empty line next";
+
+;;;
+echo "Did we survive the voids?";

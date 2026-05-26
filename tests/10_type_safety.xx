@@ -1,0 +1,10 @@
+set my_num number = 10;
+set my_str string = "hello";
+
+# Try to put a string in a number (Should error)
+set my_num number = "oops"; 
+
+# Try to compare different types (Should error)
+if my_num == my_str
+    echo "This shouldn't happen!";
+endif;

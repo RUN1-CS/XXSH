@@ -1,16 +1,24 @@
 echo "Test 01, specials -> easter eggs";
-./xxsh tests/01_easter_eggs.xx;
+xxsh tests/01_easter_eggs.xx;
 echo "Test 02, License notices";
-./xxsh tests/02_license.xx;
+xxsh tests/02_license.xx;
 echo "Test 03, if statement";
-./xxsh tests/03_if.xx;
+xxsh tests/03_if.xx;
 echo "Test 04, if else branches";
-./xxsh tests/04_if_else.xx;
+xxsh tests/04_if_else.xx;
 # echo "Test 05, loop";
-# ./xxsh tests/05_loop.xx;
+# xxsh tests/05_loop.xx;
 echo "Test 06, variable test";
-./xxsh tests/06_variables.xx;
+xxsh tests/06_variables.xx;
 echo "Test 07, one-liner test";
-./xxsh tests/07_one_liners.xx;
+xxsh tests/07_one_liners.xx;
 echo "Test 08, increments"
-./xxsh tests/08_increments.xx
+xxsh tests/08_increments.xx
+echo "Test 09, total chaos"
+xxsh tests/09_chaos.xx
+echo "Test 10, type safety"
+xxsh tests/10_type_safety.xx
+echo "Test 11, infinite loop"
+xxsh tests/11_infinite.xx
+echo "Test 12, orphan?"
+xxsh tests/12_orphan.xx

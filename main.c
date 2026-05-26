@@ -116,6 +116,22 @@ void set_variable(const char *line, Variable *variables, int *var_count){
         printf("\033[1;31mUnsupported variable type: %s\033[0m\n", type);
         return;
     }
+
+    // Check correct type of value
+    if(strcmp(type, "number") == 0){
+        char *endptr;
+        strtod(value, &endptr);
+        if(*endptr != '\0' && !isspace((unsigned char)*endptr)){
+            printf("\033[1;31mInvalid number value: %s\033[0m\n", value);
+            return;
+        }
+    } else if(strcmp(type, "bool") == 0){
+        if(strcmp(value, "true") != 0 && strcmp(value, "false") != 0){
+            printf("\033[1;31mInvalid boolean value: %s\033[0m\n", value);
+            return;
+        }
+    }
+
     // Check if variable already exists
     for(int i = 0; i < *var_count; i++){
         if(strcmp(variables[i].name, name) == 0){
@@ -488,6 +504,8 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
 
     int line_counter = 0;
 
+    int opened_ifs = 0;
+
     while(fgets(line, sizeof(line), file)){
         line_counter++;
         char *saveptr = NULL;
@@ -509,6 +527,7 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                 if(strcmp(trimmed, "endif") == 0){
                     skip_until_endif = false;
                     handle_elif = false;
+                    opened_ifs--;
                     command = strtok_r(NULL, ";", &cmd_save);
                     continue;
                 }
@@ -528,7 +547,77 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                     }
                     command = strtok_r(NULL, ";", &cmd_save); continue;
                 }
+                if(strncmp(trimmed, "decrease", 8) == 0 || strncmp(trimmed, "dec", 3) == 0){
+                    char var_name[64];
+                    if(sscanf(trimmed, "%*s %63s", var_name) == 1){
+                        for(int i = 0; i < *var_count; i++) if(strcmp(variables[i].name, var_name) == 0 && variables[i].type == VAR_NUMBER){ variables[i].value.number_value--; break; }
+                    }
+                    command = strtok_r(NULL, ";", &cmd_save); continue;
+                }
+                if(strncmp(trimmed, "echo", 4) == 0){
+                    char *echo_content = trimmed + 4;
+                    while(*echo_content && isspace((unsigned char)*echo_content)) echo_content++;
+                    if(*echo_content == '\0'){
+                        // nothing to echo
+                        command = strtok_r(NULL, ";", &cmd_save);
+                        continue;
+                    }
+                    if(echo_content[0] == '"' || echo_content[0] == '\''){
+                        char str_literal[256] = {0};
+                        size_t len = strnlen(echo_content + 1, sizeof(str_literal) - 1);
+                        // copy up to closing quote if present
+                        strncpy(str_literal, echo_content + 1, len);
+                        if(len > 0){
+                            char last = str_literal[len - 1];
+                            if(last == '"' || last == '\'') str_literal[len - 1] = '\0';
+                        }
+                        printf("%s\n", str_literal);
+                    } else {
+                        char var_name[64];
+                        if(sscanf(echo_content, "%63s", var_name) == 1){
+                            Variable var = get_variable(var_name, variables, var_count, var_name);
+                            switch(var.type){
+                                case VAR_STRING:
+                                    if(var.value.string_value && var.value.string_value[0]) printf("%s\n", var.value.string_value);
+                                    break;
+                                case VAR_NUMBER:
+                                    printf("%g\n", var.value.number_value);
+                                    break;
+                                case VAR_BOOL:
+                                    printf("%s\n", var.value.bool_value ? "true" : "false");
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
+                }
+
+                if(strncmp(trimmed, "export_path", 11) == 0){
+                    char value[256];
+                    if(sscanf(trimmed, "export_path %[^\n]", value) == 1){
+                        char *current_path = getenv("PATH");
+                        char new_path[2048];
+                        if(current_path){
+                            snprintf(new_path, sizeof(new_path), "%s:%s", current_path, value);
+                        } else {
+                            strncpy(new_path, value, sizeof(new_path) - 1);
+                            new_path[sizeof(new_path) - 1] = '\0';
+                        }
+                        if(setenv("PATH", new_path, 1) != 0){
+                            perror("setenv");
+                        }
+                    } else {
+                        printf("\033[1;31mUsage: export_path <new_path>\033[0m\n");
+                    }
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
+                }
+
                 if(strncmp(trimmed, "if ", 3) == 0 || (handle_elif && strncmp(trimmed, "elif", 4) == 0)){
+                    if(strncmp(trimmed, "if ", 3) == 0) opened_ifs++;
                     bool condition_ok = handle_condition(trimmed, variables, var_count);
                     if(!condition_ok) {
                         skip_until_endif = true;
@@ -584,7 +673,6 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                 }
 
                 if(execute_command(trimmed, &script_running) != 0){
-                    *running = false;
                     break;
                 }
 
@@ -593,6 +681,9 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
             segment = strtok_r(NULL, "\n", &saveptr);
         }
     }
+    if(opened_ifs > 0){
+        printf("\033[1;31mError: %d unclosed 'if' statement(s) detected in script %s\033[0m\n", opened_ifs, filename);
+    }
     fclose(DEBUG_LOG);
     fclose(file);
 }
@@ -600,7 +691,6 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
 int main(int argc, char **argv){
     // 1. Startup logic (.xxshrc)
     bool running = true;
-    // bool nested = false; // To prevent infinite recursion in scripts
 
     Variable variables[VAR_LIMIT]; // Assuming a maximum of 100 variables
     int var_count = 0;
@@ -610,6 +700,7 @@ int main(int argc, char **argv){
     if(access(rc_path, F_OK) != -1){
         run_script(rc_path, &running, variables, &var_count);
     }
+    getenv("PATH");
 
     // 2. SCRIPT MODE: Check if a script was passed as an argument
     if (argc > 1) {

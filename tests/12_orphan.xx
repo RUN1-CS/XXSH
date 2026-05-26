@@ -1,0 +1,4 @@
+# tests/12_orphans.xx
+if 1 == 1
+    echo "I started an if but never ended it...";
+# Missing endif
