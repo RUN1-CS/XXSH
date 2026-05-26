@@ -35,6 +35,8 @@
 #define false 0
 #define baka -1
 
+#define VAR_LIMIT 100 // Later will be dynamic, I am just too lazy to implement that right now
+
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -69,6 +71,94 @@ void setup_signals() {
     // Handle 'kill' (Termination) - usually you want a clean exit here
     sa.sa_handler = SIG_DFL; // Or a custom cleanup function
     sigaction(SIGTERM, &sa, NULL);
+}
+
+enum VariableType {
+    VAR_STRING,
+    VAR_NUMBER,
+    VAR_BOOL
+};
+
+union VariableValue {
+    char string_value[256];
+    double number_value;
+    bool bool_value;
+};
+
+typedef struct Variable {
+    char name[64];
+    enum VariableType type;
+    union VariableValue value;
+} Variable;
+
+void set_variable(const char *line, Variable *variables, int *var_count){
+    FILE *DEBUG_LOG = fopen("debug.log", "a");
+    if(DEBUG_LOG) {
+        fprintf(DEBUG_LOG, "DEBUG: Setting variable with line: %s\n", line);
+    }
+
+    char name[64];
+    char value[256];
+    char type[16];
+
+    // Syntax for setting variables: set <name> <type> = <value>
+    if(sscanf(line, "set %63s %15s = %[^\n]", name, type, value) != 3){
+        printf("\033[1;31mUsage: set <variable> <type> = <value>\033[0m\n");
+        return;
+    }
+    if(strcmp(type, "string") == 0){
+        strncpy(type, "string", sizeof(type) - 1);
+    }else if(strcmp(type, "number") == 0){
+        strncpy(type, "number", sizeof(type) - 1);
+    }else if(strcmp(type, "bool") == 0){
+        strncpy(type, "bool", sizeof(type) - 1);
+    }else{
+        printf("\033[1;31mUnsupported variable type: %s\033[0m\n", type);
+        return;
+    }
+    // Check if variable already exists
+    for(int i = 0; i < *var_count; i++){
+        if(strcmp(variables[i].name, name) == 0){
+            // Update existing variable
+            switch(variables[i].type){
+                case VAR_STRING:
+                    strncpy(variables[i].value.string_value, value, sizeof(variables[i].value.string_value) - 1);
+                    break;
+                case VAR_NUMBER:
+                    variables[i].value.number_value = atof(value);
+                    break;
+                case VAR_BOOL:
+                    variables[i].value.bool_value = (strcmp(value, "true") == 0);
+                    break;
+            }
+            fprintf(DEBUG_LOG, "DEBUG: Updated variable '%s' to '%s' with type %d\n", name, value, variables[i].type);
+            return;
+        }
+    }
+    fprintf(DEBUG_LOG, "DEBUG: Adding new variable '%s' with value '%s' and type %s\n", name, value, type);
+    // Add new variable
+    if(*var_count < VAR_LIMIT){
+        strncpy(variables[*var_count].name, name, sizeof(variables[*var_count].name) - 1);
+        switch(type[0]){
+            case 's':
+                variables[*var_count].type = VAR_STRING;
+                strncpy(variables[*var_count].value.string_value, value, sizeof(variables[*var_count].value.string_value) - 1);
+                break;
+            case 'n':
+                variables[*var_count].type = VAR_NUMBER;
+                variables[*var_count].value.number_value = atof(value);
+                break;
+            case 'b':
+                variables[*var_count].type = VAR_BOOL;
+                variables[*var_count].value.bool_value = (strcmp(value, "true") == 0);
+                break;
+        }
+        fprintf(DEBUG_LOG, "DEBUG: Set variable '%s' to '%s' with type %d\n", name, value, variables[*var_count].type);
+        (*var_count)++;
+    } else {
+        printf("\033[1;31mVariable limit reached (%d)\033[0m\n", VAR_LIMIT);
+    }
+    fclose(DEBUG_LOG);
 }
 
 // Check for special built-in commands that don't require forking
@@ -138,186 +228,235 @@ void greeting(){
 
 // Execute a command with optional piping
 int execute_command(char *command, bool *running){
-    char *args[MAX_COMMAND_LENGTH / 2 + 1]; // Maximum number of arguments
-    int argc = 0;
-    char *token = strtok(command, " \t");
+    char *saveptr = NULL;
+    char *segment = strtok_r(command, ";", &saveptr);
 
-    // Tokenize the command into arguments
-    while(token != NULL && argc < (MAX_COMMAND_LENGTH / 2)){
-        args[argc++] = token;
-        token = strtok(NULL, " \t");
-    }
-    args[argc] = NULL;
+    while(segment != NULL){
+        while(*segment == ' ' || *segment == '\t') segment++;
+        char *end = segment + strlen(segment);
+        while(end > segment && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n')) *--end = '\0';
 
-    // If no command was entered, just return
-    if(argc == 0) return 0;
+        if(*segment != '\0'){
+            char *args[MAX_COMMAND_LENGTH / 2 + 1];
+            int argc = 0;
+            char *token = strtok(segment, " \t");
 
-    // Check for special built-in commands like exit/show before exec
-    if(specials(args[0], (argc > 1) ? args[1] : NULL, running)) return 0;
+            while(token != NULL && argc < (MAX_COMMAND_LENGTH / 2)){
+                args[argc++] = token;
+                token = strtok(NULL, " \t");
+            }
+            args[argc] = NULL;
 
-    // Check for pipes
-    int pipe_indices[argc];
-    int pipe_count = 0;
-    // Identify pipe positions and split it into separate commands
-    for(int i = 0; i < argc; i++){
-        if(strcmp(args[i], "|") == 0){
-            pipe_indices[pipe_count++] = i;
-            args[i] = NULL;
+            if(argc > 0){
+                if(specials(args[0], (argc > 1) ? args[1] : NULL, running)){
+                    segment = strtok_r(NULL, ";", &saveptr);
+                    continue;
+                }
+
+                int pipe_indices[argc];
+                int pipe_count = 0;
+                for(int i = 0; i < argc; i++){
+                    if(strcmp(args[i], "|") == 0){
+                        pipe_indices[pipe_count++] = i;
+                        args[i] = NULL;
+                    }
+                }
+
+                if(pipe_count == 0){
+                    pid_t pid = fork();
+                    if(pid == 0){
+                        execvp(args[0], args);
+                        printf("\033[1;31mCommand not found: %s\033[0m\n", args[0]);
+                        exit(EXIT_FAILURE);
+                    } else if(pid > 0){
+                        int status = 0;
+                        waitpid(pid, &status, 0);
+                        if(!WIFEXITED(status) || WEXITSTATUS(status) != 0){
+                            return -1;
+                        }
+                    } else {
+                        perror("fork");
+                        return -1;
+                    }
+                } else {
+                    int cmd_start = 0;
+                    int prev_read = -1;
+                    pid_t pids[pipe_count + 1];
+                    int pid_count = 0;
+
+                    for(int i = 0; i <= pipe_count; i++){
+                        int fd[2] = {-1, -1};
+                        if(i < pipe_count && pipe(fd) == -1){
+                            perror("pipe");
+                            return -1;
+                        }
+
+                        pid_t pid = fork();
+                        if(pid == 0){
+                            signal(SIGINT, SIG_DFL);
+                            signal(SIGQUIT, SIG_DFL);
+                            signal(SIGTSTP, SIG_DFL);
+                            signal(SIGTTIN, SIG_DFL);
+                            signal(SIGTTOU, SIG_DFL);
+                            signal(SIGCHLD, SIG_DFL);
+
+                            if(prev_read != -1) dup2(prev_read, STDIN_FILENO);
+                            if(i < pipe_count) dup2(fd[1], STDOUT_FILENO);
+
+                            if(prev_read != -1) close(prev_read);
+                            if(i < pipe_count){ close(fd[0]); close(fd[1]); }
+
+                            execvp(args[cmd_start], &args[cmd_start]);
+                            perror("execvp");
+                            exit(EXIT_FAILURE);
+                        } else if(pid > 0){
+                            pids[pid_count++] = pid;
+                            if(prev_read != -1) close(prev_read);
+                            if(i < pipe_count){
+                                close(fd[1]);
+                                prev_read = fd[0];
+                            } else {
+                                prev_read = -1;
+                            }
+                            cmd_start = (i < pipe_count) ? pipe_indices[i] + 1 : cmd_start;
+                        } else {
+                            perror("fork");
+                            if(prev_read != -1) close(prev_read);
+                            if(i < pipe_count){ close(fd[0]); close(fd[1]); }
+                            return -1;
+                        }
+                    }
+
+                    for(int i = 0; i < pid_count; i++){
+                        int status = 0;
+                        waitpid(pids[i], &status, 0);
+                        if(!WIFEXITED(status) || WEXITSTATUS(status) != 0){
+                            return -1;
+                        }
+                    }
+                }
+            }
         }
+
+        segment = strtok_r(NULL, ";", &saveptr);
     }
 
-    // No pipes - simple command
-    if(pipe_count == 0){
-        // Handle signals in the child process
-        pid_t pid = fork();
-        if(pid == 0){
-            execvp(args[0], args);
-            perror("execvp");
-            printf("\033[1;31mCommand not found: %s\033[0m\n", args[0]);
-            exit(EXIT_FAILURE);
-        } else if(pid > 0){
-            wait(NULL);
-        } else {
-            perror("fork");
-            return -1;
-        }
-        return 0;
-    }
-
-    // Handle pipes without changing the shell's own stdin/stdout
-    int cmd_start = 0;
-    int prev_read = -1;
-    // Store child PIDs to wait for them later
-    pid_t pids[pipe_count + 1];
-    int pid_count = 0;
-
-    // Loop through each command segment separated by pipes
-    for(int i = 0; i <= pipe_count; i++){
-        int fd[2] = {-1, -1};
-        // Create a pipe for all but the last command
-        if(i < pipe_count && pipe(fd) == -1){
-            perror("pipe");
-            return -1;
-        }
-
-        // Fork a child process for the current command segment
-        pid_t pid = fork();
-        if(pid == 0){ // Child process
-
-            // Reset signal handlers to default in the child process
-            signal(SIGINT, SIG_DFL);
-            signal(SIGQUIT, SIG_DFL);
-            signal(SIGTSTP, SIG_DFL);
-            signal(SIGTTIN, SIG_DFL);
-            signal(SIGTTOU, SIG_DFL);
-            signal(SIGCHLD, SIG_DFL);
-
-            // If this is not the first command, set stdin to the previous pipe's read end
-            if(prev_read != -1){
-                dup2(prev_read, STDIN_FILENO);
-            }
-            // If this is not the last command, set stdout to the current pipe's write end
-            if(i < pipe_count){
-                dup2(fd[1], STDOUT_FILENO);
-            }
-
-            // Close unused file descriptors in the child process
-            if(prev_read != -1) close(prev_read);
-            if(i < pipe_count){
-                close(fd[0]);
-                close(fd[1]);
-            }
-
-            // Execute the command segment
-            execvp(args[cmd_start], &args[cmd_start]);
-            perror("execvp");
-            exit(EXIT_FAILURE);
-        } else if(pid > 0){ // Parent process
-            pids[pid_count++] = pid;
-
-            // Close unused file descriptors in the parent process
-            if(prev_read != -1) close(prev_read);
-            if(i < pipe_count){
-                close(fd[1]);
-                prev_read = fd[0];
-            } else {
-                prev_read = -1;
-            }
-
-            // Update cmd_start for the next command segment
-            cmd_start = (i < pipe_count) ? pipe_indices[i] + 1 : cmd_start;
-        } else {
-            // Fork failed
-            perror("fork");
-            if(prev_read != -1) close(prev_read);
-            if(i < pipe_count){
-                close(fd[0]);
-                close(fd[1]);
-            }
-            return -1;
-        }
-    }
-    
-    // Wait for all child processes
-    for(int i = 0; i < pid_count; i++){
-        waitpid(pids[i], NULL, 0);
-    }
-    
     return 0;
 }
 
-bool handle_operators(char *op, char *left, char *right){
-    switch(op[0]){
-        case '=':
-            if(strcmp(left, right) == 0) return true;
-            return false;
-            break;
-        case '!':
-            if(strcmp(left, right) != 0) return true;
-            return false;
-            break;
-        default:
-            printf("\033[1;31mUnsupported operator: %s\033[0m\n", op);
-            return false;
+bool handle_operators(char *op, Variable left, Variable right){
+    if(strcmp(op, "==") == 0){
+        if(left.type == VAR_NUMBER || right.type == VAR_NUMBER){
+            return left.value.number_value == right.value.number_value;
+        }
+        if(left.type == VAR_BOOL || right.type == VAR_BOOL){
+            return left.value.bool_value == right.value.bool_value;
+        }
+        return strcmp(left.value.string_value, right.value.string_value) == 0;
+    }
+    if(strcmp(op, "!=") == 0){
+        return !handle_operators("==", left, right);
+    }
+    if(strcmp(op, ">") == 0) return left.value.number_value > right.value.number_value;
+    if(strcmp(op, "<") == 0) return left.value.number_value < right.value.number_value;
+    if(strcmp(op, ">=") == 0) return left.value.number_value >= right.value.number_value;
+    if(strcmp(op, "<=") == 0) return left.value.number_value <= right.value.number_value;
+    return false;
+}
+
+Variable get_variable(const char *name, Variable *variables, int * var_count, char * src){
+    // It's a variable, we can look it up
+    for(int i = 0; i < *var_count; i++){
+        if(strcmp(variables[i].name, src) == 0){
+            return variables[i];
+        }
+    }
+    FILE *DEBUG_LOG = fopen("debug.log", "a");
+    if(DEBUG_LOG) {
+        fprintf(DEBUG_LOG, "DEBUG: Variable '%s' not found, returning NULL\n", src);
+        fclose(DEBUG_LOG);
+    }
+    
+    return (Variable){0}; // Return NULL if variable not found
+}
+
+void parse_operand(char *operand, Variable *value, Variable *variables, int *var_count){
+    if(operand[0] >= '0' && operand[0] <= '9'){
+        // It's a number, we can convert it to a string for comparison
+        char num_str[64];
+        snprintf(num_str, sizeof(num_str), "%d", atoi(operand));
+        value->value.number_value = atof(num_str);
+    }else if(strcmp(operand, "true") == 0 || strcmp(operand, "false") == 0){
+        // It's a boolean, convert to 1 or 0
+        int bool_val = (strcmp(operand, "true") == 0) ? 1 : 0;
+        value->value.bool_value = bool_val;
+    }else if(operand[0] == '"' || operand[0] == '\'') {
+        // It's a string literal, we can remove the quotes for comparison
+        char str_literal[256];
+        strncpy(str_literal, operand + 1, sizeof(str_literal) - 1);
+        str_literal[strlen(str_literal) - 1] = '\0'; // Remove closing quote
+        strncpy(operand, str_literal, sizeof(operand) - 1);
+    }else{
+        // It's a variable, we can look it up
+        *value = get_variable(operand, variables, var_count, operand);
     }
 }
 
-bool handle_condition(char line[MAX_COMMAND_LENGTH]){
-    // Get type (if, else, elif)
-    char *type = strtok(line, " ");
+bool is_literal(const char *str) {
+    if (str[0] >= '0' && str[0] <= '9') return true;
+    if (strcmp(str, "true") == 0 || strcmp(str, "false") == 0) return true;
+    if (str[0] == '"' || str[0] == '\'') return true;
+    return false;
+}
 
-    if(type == NULL) return false;
+bool handle_condition(char line[MAX_COMMAND_LENGTH], Variable *variables, int *var_count){
+    char type[8] = {0};
+    char left[256] = {0};
+    char op[8] = {0};
+    char right[256] = {0};
+
+    if(sscanf(line, "%7s %255s %7s %255s", type, left, op, right) < 1) return false;
+
     if(strcmp(type, "else") == 0){
-        return true; // Else always runs if we got here
+        return true;
     }else if(strcmp(type, "if") == 0 || strcmp(type, "elif") == 0){
-        // Get the condition part (e.g., "if 1 == 1")
-        char *condition = line + 3; // Skip "if "
-
-        // No ORs or ANDs
-        char *left = strtok(condition, " ");
-        char *op = strtok(NULL, " ");
-        char *right = strtok(NULL, " ");
-
-        return handle_operators(op, left, right);
+        if(left[0] == '\0' || op[0] == '\0' || right[0] == '\0') return false;
+        Variable left_value = {0};
+        if (!is_literal(left)) {
+            left_value = get_variable(left, variables, var_count, left);
+        }
+        parse_operand(left, &left_value, variables, var_count);
+        Variable right_value = {0};
+        if (!is_literal(right)) {
+            right_value = get_variable(right, variables, var_count, right);
+        }
+        parse_operand(right, &right_value, variables, var_count);
+        return handle_operators(op, left_value, right_value);
     }
     return false;
 }
 
-bool handle_loop(char line[MAX_COMMAND_LENGTH]){
-    // Get type (loop)
-    char *type = strtok(line, " ");
+bool handle_loop(char line[MAX_COMMAND_LENGTH], Variable *variables, int *var_count){
+    char type[8] = {0};
+    char left[256] = {0};
+    char op[8] = {0};
+    char right[256] = {0};
 
-    if(type == NULL) return false;
+    if(sscanf(line, "%7s %255s %7s %255s", type, left, op, right) < 1) return false;
+
     if(strcmp(type, "loop") == 0){
-        // Get the condition part (e.g., "loop 1 == 1")
-        char *condition = line + 5; // Skip "loop "
-
-        // No ORs or ANDs
-        char *left = strtok(condition, " ");
-        char *op = strtok(NULL, " ");
-        char *right = strtok(NULL, " ");
-
-        return handle_operators(op, left, right);
+        if(left[0] == '\0' || op[0] == '\0' || right[0] == '\0') return false;
+        Variable left_value = {0};
+        if (!is_literal(left)) {
+            left_value = get_variable(left, variables, var_count, left);
+        }
+        parse_operand(left, &left_value, variables, var_count);
+        Variable right_value = {0};
+        if (!is_literal(right)) {
+            right_value = get_variable(right, variables, var_count, right);
+        }
+        parse_operand(right, &right_value, variables, var_count);
+        return handle_operators(op, left_value, right_value);
     }
     return false;
 }
@@ -326,10 +465,11 @@ typedef struct Loop{
     int depth;
     int start_line;
     long file_pos;
+    char condition[MAX_COMMAND_LENGTH];
 } Loop;
 
 // Interpret (WIP) and run a script file
-void run_script(const char *filename, bool *running){
+void run_script(const char *filename, bool *running, Variable *variables, int *var_count){
     FILE *file = fopen(filename, "r");
     if(!file) return;
     FILE *DEBUG_LOG = fopen("debug.log", "a");
@@ -342,6 +482,7 @@ void run_script(const char *filename, bool *running){
 
     bool handle_elif = false;
     bool loop_active = false;
+    bool skip_until_endif = false;
     Loop loops[100]; // Assuming a maximum of 100 nested loops
     int loop_count = 0;
 
@@ -349,63 +490,108 @@ void run_script(const char *filename, bool *running){
 
     while(fgets(line, sizeof(line), file)){
         line_counter++;
-        // 1. Clean the line
-        line[strcspn(line, ";\n")] = 0; // We use ';' for end of a command
-        
-        // 2. Skip comments/empty
-        if(line[0] == '#' || line[0] == '\0') continue;
+        char *saveptr = NULL;
+        char *segment = strtok_r(line, "\n", &saveptr);
+        while(segment != NULL){
+            char *cmd_save = NULL;
+            char *command = strtok_r(segment, ";", &cmd_save);
+            while(command != NULL){
+                char *trimmed = command;
+                while(*trimmed && isspace((unsigned char)*trimmed)) trimmed++;
 
-        fprintf(DEBUG_LOG, "DEBUG: Processing line: %s\n", line); // Debug log
+                if(trimmed[0] == '\0' || trimmed[0] == '#'){
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
+                }
 
-        // Skip block terminators and shebangs
-        if(strcmp(line, "endif") == 0) continue;
-        if(strncmp(line, "#!", 2) == 0) continue;
+                fprintf(DEBUG_LOG, "DEBUG: Processing line: %s\n", trimmed);
 
-        // 3. Handle conditions and loops (WIP)
-        if(strncmp(line, "if ", 3) == 0 || (handle_elif && strncmp(line, "elif", 4) == 0)){
-            if(!handle_condition(line)){
-                // Skip to the next "endif", "else", or "elif"
-                while(fgets(line, sizeof(line), file)){
-                    line_counter++;
-                    fprintf(DEBUG_LOG, "DEBUG: Skipping line in condition block: %s\n", line); // Debug log
-                    if(strncmp(line, "elif", 4) == 0) {
-                        handle_elif = true;
-                        break;
+                if(strcmp(trimmed, "endif") == 0){
+                    skip_until_endif = false;
+                    handle_elif = false;
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
+                }
+                if(strncmp(trimmed, "#!", 2) == 0){
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
+                }
+                if(skip_until_endif){
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
+                }
+                if(strncmp(trimmed, "set", 3) == 0){ set_variable(trimmed, variables, var_count); command = strtok_r(NULL, ";", &cmd_save); continue; }
+                if(strncmp(trimmed, "increase", 8) == 0 || strncmp(trimmed, "inc", 3) == 0){
+                    char var_name[64];
+                    if(sscanf(trimmed, "%*s %63s", var_name) == 1){
+                        for(int i = 0; i < *var_count; i++) if(strcmp(variables[i].name, var_name) == 0 && variables[i].type == VAR_NUMBER){ variables[i].value.number_value++; break; }
                     }
-                    if(strncmp(line, "else", 4) == 0) break;
-                    if(strncmp(line, "endif", 5) == 0) break;
+                    command = strtok_r(NULL, ";", &cmd_save); continue;
                 }
-            }
-            continue;
-        }
-        if(strncmp(line, "loop", 4) == 0){
-            if(!handle_loop(line)){
-                fprintf(DEBUG_LOG, "DEBUG: Skipping loop block\n"); // Debug log
-                // Skip to the next "endloop"
-                while(fgets(line, sizeof(line), file)){
-                    line_counter++;
-                    fprintf(DEBUG_LOG, "DEBUG: Skipping line in loop block: %s\n", line); // Debug log
-                    if(strncmp(line, "endloop", 7) == 0) break;
+                if(strncmp(trimmed, "if ", 3) == 0 || (handle_elif && strncmp(trimmed, "elif", 4) == 0)){
+                    bool condition_ok = handle_condition(trimmed, variables, var_count);
+                    if(!condition_ok) {
+                        skip_until_endif = true;
+                    } else {
+                        char *body = NULL;
+                        char *cursor = trimmed;
+                        if(strncmp(cursor, "if", 2) == 0){
+                            cursor += 2;
+                        } else if(strncmp(cursor, "elif", 4) == 0){
+                            cursor += 4;
+                        }
+                        while(*cursor && isspace((unsigned char)*cursor)) cursor++;
+
+                        for(int token = 0; token < 3 && *cursor; token++){
+                            while(*cursor && !isspace((unsigned char)*cursor)) cursor++;
+                            while(*cursor && isspace((unsigned char)*cursor)) cursor++;
+                        }
+                        if(*cursor != '\0') body = cursor;
+
+                        if(body && *body){
+                            execute_command(body, &script_running);
+                        }
+                    }
+                    handle_elif = false;
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
                 }
-            }else{
-                loops[loop_count].depth = loop_count; // Start of a new loop
-                loops[loop_count].start_line = line_counter; // Store the line number where the loop starts
-                loops[loop_count].file_pos = ftell(file); // Store the file position for the start of the loop
-                loop_count++;
-                loop_active = true;
+                if(strncmp(trimmed, "loop", 4) == 0){
+                    if(!handle_loop(trimmed, variables, var_count)){
+                        skip_until_endif = true;
+                    }else{
+                        loops[loop_count].depth = loop_count;
+                        loops[loop_count].start_line = line_counter;
+                        loops[loop_count].file_pos = ftell(file);
+                        strncpy(loops[loop_count].condition, trimmed, sizeof(loops[loop_count].condition) - 1);
+                        loops[loop_count].condition[sizeof(loops[loop_count].condition) - 1] = '\0';
+                        loop_count++;
+                        loop_active = true;
+                    }
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
+                }
+                if(loop_active && strncmp(trimmed, "endloop", 7) == 0){
+                    if(handle_loop(loops[loop_count - 1].condition, variables, var_count)){
+                        fseek(file, loops[loop_count - 1].file_pos, SEEK_SET);
+                        line_counter = loops[loop_count - 1].start_line;
+                    } else {
+                        loop_count--;
+                        if(loop_count == 0) loop_active = false;
+                    }
+                    command = strtok_r(NULL, ";", &cmd_save);
+                    continue;
+                }
+
+                if(execute_command(trimmed, &script_running) != 0){
+                    *running = false;
+                    break;
+                }
+
+                command = strtok_r(NULL, ";", &cmd_save);
             }
-            continue;
+            segment = strtok_r(NULL, "\n", &saveptr);
         }
-
-        if(loop_active && strncmp(line, "endloop", 7) == 0){
-            fprintf(DEBUG_LOG, "DEBUG: Going back to the beginning of the loop\n"); // Debug log
-            fseek(file, loops[loop_count - 1].file_pos, SEEK_SET); // Go back to the start of the loop
-            line_counter = loops[loop_count - 1].start_line; // Reset line counter to the start of the loop
-            continue;
-        }
-
-        // 4. Just pass the whole line to execute_command
-        execute_command(line, &script_running);
     }
     fclose(DEBUG_LOG);
     fclose(file);
@@ -415,15 +601,19 @@ int main(int argc, char **argv){
     // 1. Startup logic (.xxshrc)
     bool running = true;
     // bool nested = false; // To prevent infinite recursion in scripts
+
+    Variable variables[VAR_LIMIT]; // Assuming a maximum of 100 variables
+    int var_count = 0;
+
     char rc_path[256];
     snprintf(rc_path, sizeof(rc_path), "%s/.xxshrc", getenv("HOME"));
     if(access(rc_path, F_OK) != -1){
-        run_script(rc_path, &running);
+        run_script(rc_path, &running, variables, &var_count);
     }
 
     // 2. SCRIPT MODE: Check if a script was passed as an argument
     if (argc > 1) {
-        run_script(argv[1], &running);
+        run_script(argv[1], &running, variables, &var_count);
         return 0; // Exit after running the script
     }
 
@@ -442,10 +632,21 @@ int main(int argc, char **argv){
         if(strlen(input) == 0) { free(input); continue; }
         if(input && *input) add_history(input);
         
-        strcpy(command, input);
-        free(input);
+        char *saveptr = NULL;
+        char *segment = strtok_r(input, ";", &saveptr);
+        while(segment != NULL){
+            char *trimmed = segment;
+            while(*trimmed && isspace((unsigned char)*trimmed)) trimmed++;
 
-        execute_command(command, &running);
+            if(*trimmed != '\0'){
+                strncpy(command, trimmed, sizeof(command) - 1);
+                command[sizeof(command) - 1] = '\0';
+                execute_command(command, &running);
+            }
+
+            segment = strtok_r(NULL, ";", &saveptr);
+        }
+        free(input);
     }
     return 0;
 }

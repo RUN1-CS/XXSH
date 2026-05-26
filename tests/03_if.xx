@@ -1,0 +1,7 @@
+if 4 == 4
+    echo "True";
+endif;
+
+if 4 != 4
+    echo "False, shouldn't run";
+endif;

@@ -1,17 +1,16 @@
-#!/home/run1/Projects/C/XXSH/xxsh
-
-if 5 != 5
-    show;
-elif 5 == 5
-    show w; show c;
-endif;
-
-if 5 != 5
-    45510;
-else
-    02;
-endif;
-
-loop 4 == 4
-    86;
-endloop;
+echo "Test 01, specials -> easter eggs";
+./xxsh tests/01_easter_eggs.xx;
+echo "Test 02, License notices";
+./xxsh tests/02_license.xx;
+echo "Test 03, if statement";
+./xxsh tests/03_if.xx;
+echo "Test 04, if else branches";
+./xxsh tests/04_if_else.xx;
+# echo "Test 05, loop";
+# ./xxsh tests/05_loop.xx;
+echo "Test 06, variable test";
+./xxsh tests/06_variables.xx;
+echo "Test 07, one-liner test";
+./xxsh tests/07_one_liners.xx;
+echo "Test 08, increments"
+./xxsh tests/08_increments.xx

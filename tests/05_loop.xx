@@ -1,0 +1,3 @@
+loop 5 == 5
+    echo "Loop, should be stuck";
+endloop;
