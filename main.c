@@ -173,6 +173,7 @@ int execute_command(char *command, bool *running){
         if(pid == 0){
             execvp(args[0], args);
             perror("execvp");
+            printf("\033[1;31mCommand not found: %s\033[0m\n", args[0]);
             exit(EXIT_FAILURE);
         } else if(pid > 0){
             wait(NULL);
@@ -265,15 +266,7 @@ int execute_command(char *command, bool *running){
     return 0;
 }
 
-bool handle_condition(char line[MAX_COMMAND_LENGTH]){
-    // Get the condition part (e.g., "if 1 == 1")
-    char *condition = line + 3; // Skip "if "
-
-    // No ORs or ANDs
-    char *left = strtok(condition, " ");
-    char *op = strtok(NULL, " ");
-    char *right = strtok(NULL, " ");
-
+bool handle_operators(char *op, char *left, char *right){
     switch(op[0]){
         case '=':
             if(strcmp(left, right) == 0) return true;
@@ -284,44 +277,135 @@ bool handle_condition(char line[MAX_COMMAND_LENGTH]){
             return false;
             break;
         default:
-            printf("\033[1;31mUnsupported operator in condition: %s\033[0m\n", op);
+            printf("\033[1;31mUnsupported operator: %s\033[0m\n", op);
             return false;
     }
 }
+
+bool handle_condition(char line[MAX_COMMAND_LENGTH]){
+    // Get type (if, else, elif)
+    char *type = strtok(line, " ");
+
+    if(type == NULL) return false;
+    if(strcmp(type, "else") == 0){
+        return true; // Else always runs if we got here
+    }else if(strcmp(type, "if") == 0 || strcmp(type, "elif") == 0){
+        // Get the condition part (e.g., "if 1 == 1")
+        char *condition = line + 3; // Skip "if "
+
+        // No ORs or ANDs
+        char *left = strtok(condition, " ");
+        char *op = strtok(NULL, " ");
+        char *right = strtok(NULL, " ");
+
+        return handle_operators(op, left, right);
+    }
+    return false;
+}
+
+bool handle_loop(char line[MAX_COMMAND_LENGTH]){
+    // Get type (loop)
+    char *type = strtok(line, " ");
+
+    if(type == NULL) return false;
+    if(strcmp(type, "loop") == 0){
+        // Get the condition part (e.g., "loop 1 == 1")
+        char *condition = line + 5; // Skip "loop "
+
+        // No ORs or ANDs
+        char *left = strtok(condition, " ");
+        char *op = strtok(NULL, " ");
+        char *right = strtok(NULL, " ");
+
+        return handle_operators(op, left, right);
+    }
+    return false;
+}
+
+typedef struct Loop{
+    int depth;
+    int start_line;
+} Loop;
 
 // Interpret (WIP) and run a script file
 void run_script(const char *filename, bool *running){
     FILE *file = fopen(filename, "r");
     if(!file) return;
+    FILE *DEBUG_LOG = fopen("debug.log", "a");
+    if(DEBUG_LOG) {
+        fprintf(DEBUG_LOG, "Running script: %s\n", filename);
+    }
 
     char line[MAX_COMMAND_LENGTH];
     bool script_running = *running; // Temporary flag for the script session
 
+    bool handle_elif = false;
+    bool loop_active = false;
+    Loop loops[100]; // Assuming a maximum of 100 nested loops
+    int loop_count = 0;
+
+    int line_counter = 0;
+
     while(fgets(line, sizeof(line), file)){
+        line_counter++;
         // 1. Clean the line
         line[strcspn(line, ";\n")] = 0; // We use ';' for end of a command
         
         // 2. Skip comments/empty
         if(line[0] == '#' || line[0] == '\0') continue;
 
+        fprintf(DEBUG_LOG, "DEBUG: Processing line: %s\n", line); // Debug log
+
         // Skip block terminators and shebangs
         if(strcmp(line, "endif") == 0) continue;
         if(strncmp(line, "#!", 2) == 0) continue;
 
         // 3. Handle conditions and loops (WIP)
-        if(strncmp(line, "if ", 3) == 0){
+        if(strncmp(line, "if ", 3) == 0 || (handle_elif && strncmp(line, "elif", 4) == 0)){
             if(!handle_condition(line)){
-                // Skip to the next "endif"
+                // Skip to the next "endif", "else", or "elif"
                 while(fgets(line, sizeof(line), file)){
+                    line_counter++;
+                    fprintf(DEBUG_LOG, "DEBUG: Skipping line in condition block: %s\n", line); // Debug log
+                    if(strncmp(line, "elif", 4) == 0) {
+                        handle_elif = true;
+                        break;
+                    }
+                    if(strncmp(line, "else", 4) == 0) break;
                     if(strncmp(line, "endif", 5) == 0) break;
                 }
             }
+            continue;
+        }
+        if(strncmp(line, "loop", 4) == 0){
+            if(!handle_loop(line)){
+                fprintf(DEBUG_LOG, "DEBUG: Skipping loop block\n"); // Debug log
+                // Skip to the next "endloop"
+                while(fgets(line, sizeof(line), file)){
+                    line_counter++;
+                    fprintf(DEBUG_LOG, "DEBUG: Skipping line in loop block: %s\n", line); // Debug log
+                    if(strncmp(line, "endloop", 7) == 0) break;
+                }
+            }else{
+                loops[loop_count].depth = 1; // Start of a new loop
+                loops[loop_count].start_line = line_counter; // Store the line number where the loop starts
+                loop_count++;
+                loop_active = true;
+            }
+            continue;
+        }
+
+        if(loop_active && strncmp(line, "endloop", 7) == 0){
+            // Loops don't loop yet, WIP
+            loop_active = false;
+            loop_count--;
             continue;
         }
 
         // 4. Just pass the whole line to execute_command
         execute_command(line, &script_running);
     }
+    fclose(DEBUG_LOG);
     fclose(file);
 }
 

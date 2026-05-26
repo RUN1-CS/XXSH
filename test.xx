@@ -1,0 +1,17 @@
+#!/home/run1/Projects/C/XXSH/xxsh
+
+if 5 != 5
+    show;
+elif 5 == 5
+    show w; show c;
+endif;
+
+if 5 != 5
+    45510;
+else
+    02;
+endif;
+
+loop 4 == 4
+    86;
+endloop;
