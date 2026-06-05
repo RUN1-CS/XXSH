@@ -27,8 +27,10 @@
 #include <unistd.h>
 #include <time.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #include <sys/wait.h>
+#include <sys/types.h>
 
 #define bool int
 #define true 1
@@ -138,7 +140,7 @@ void set_variable(const char *line, Variable *variables, int *var_count){
             // Update existing variable
             switch(variables[i].type){
                 case VAR_STRING:
-                    strncpy(variables[i].value.string_value, value, sizeof(variables[i].value.string_value) - 1);
+                    strncpy(variables[i].value.string_value, value, sizeof(variables[i].value.string_value));
                     break;
                 case VAR_NUMBER:
                     variables[i].value.number_value = atof(value);
@@ -154,11 +156,11 @@ void set_variable(const char *line, Variable *variables, int *var_count){
     fprintf(DEBUG_LOG, "DEBUG: Adding new variable '%s' with value '%s' and type %s\n", name, value, type);
     // Add new variable
     if(*var_count < VAR_LIMIT){
-        strncpy(variables[*var_count].name, name, sizeof(variables[*var_count].name) - 1);
+        strncpy(variables[*var_count].name, name, sizeof(variables[*var_count].name));
         switch(type[0]){
             case 's':
                 variables[*var_count].type = VAR_STRING;
-                strncpy(variables[*var_count].value.string_value, value, sizeof(variables[*var_count].value.string_value) - 1);
+                strncpy(variables[*var_count].value.string_value, value, sizeof(variables[*var_count].value.string_value));
                 break;
             case 'n':
                 variables[*var_count].type = VAR_NUMBER;
@@ -267,7 +269,16 @@ int execute_command(char *command, bool *running){
                 if(specials(args[0], (argc > 1) ? args[1] : NULL, running)){
                     segment = strtok_r(NULL, ";", &saveptr);
                     continue;
+                }else if(strncmp(args[0], "cd", 2) == 0){
+                    const char *path = (argc > 1) ? args[1] : getenv("HOME");
+                    if(chdir(path) != 0){
+                        perror("cd");
+                    }
+                    segment = strtok_r(NULL, ";", &saveptr);
+                    continue;
                 }
+
+                int fd = -1;
 
                 int pipe_indices[argc];
                 int pipe_count = 0;
@@ -276,17 +287,27 @@ int execute_command(char *command, bool *running){
                         pipe_indices[pipe_count++] = i;
                         args[i] = NULL;
                     }else if(strcmp(args[i], ">>") == 0){
-                        printf("\033[1;31mOutput redirection is not supported yet.\033[0m\n");
-                        return -1;
+                        fd = open(args[i + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
+                        if(fd == -1){
+                            perror("open");
+                            return -1;
+                        }
                     }else if(strcmp(args[i], ">") == 0){
-                        printf("\033[1;31mOutput redirection is not supported yet.\033[0m\n");
-                        return -1;
+                        fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if(fd == -1){
+                            perror("open");
+                            return -1;
+                        }
                     }
                 }
 
                 if(pipe_count == 0){
                     pid_t pid = fork();
                     if(pid == 0){
+                        if(fd != -1){
+                            dup2(fd, STDOUT_FILENO);
+                            close(fd);
+                        }
                         execvp(args[0], args);
                         printf("\033[1;31mCommand not found: %s\033[0m\n", args[0]);
                         exit(EXIT_FAILURE);
@@ -386,7 +407,7 @@ bool handle_operators(char *op, Variable left, Variable right){
     return false;
 }
 
-Variable get_variable(const char *name, Variable *variables, int * var_count, char * src){
+Variable get_variable(Variable *variables, int * var_count, char * src){
     // It's a variable, we can look it up
     for(int i = 0; i < *var_count; i++){
         if(strcmp(variables[i].name, src) == 0){
@@ -417,10 +438,10 @@ void parse_operand(char *operand, Variable *value, Variable *variables, int *var
         char str_literal[256];
         strncpy(str_literal, operand + 1, sizeof(str_literal) - 1);
         str_literal[strlen(str_literal) - 1] = '\0'; // Remove closing quote
-        strncpy(operand, str_literal, sizeof(operand) - 1);
+        strcpy(operand, str_literal);
     }else{
         // It's a variable, we can look it up
-        *value = get_variable(operand, variables, var_count, operand);
+        *value = get_variable(variables, var_count, operand);
     }
 }
 
@@ -445,12 +466,12 @@ bool handle_condition(char line[MAX_COMMAND_LENGTH], Variable *variables, int *v
         if(left[0] == '\0' || op[0] == '\0' || right[0] == '\0') return false;
         Variable left_value = {0};
         if (!is_literal(left)) {
-            left_value = get_variable(left, variables, var_count, left);
+            left_value = get_variable(variables, var_count, left);
         }
         parse_operand(left, &left_value, variables, var_count);
         Variable right_value = {0};
         if (!is_literal(right)) {
-            right_value = get_variable(right, variables, var_count, right);
+            right_value = get_variable(variables, var_count, right);
         }
         parse_operand(right, &right_value, variables, var_count);
         return handle_operators(op, left_value, right_value);
@@ -470,12 +491,12 @@ bool handle_loop(char line[MAX_COMMAND_LENGTH], Variable *variables, int *var_co
         if(left[0] == '\0' || op[0] == '\0' || right[0] == '\0') return false;
         Variable left_value = {0};
         if (!is_literal(left)) {
-            left_value = get_variable(left, variables, var_count, left);
+            left_value = get_variable(variables, var_count, left);
         }
         parse_operand(left, &left_value, variables, var_count);
         Variable right_value = {0};
         if (!is_literal(right)) {
-            right_value = get_variable(right, variables, var_count, right);
+            right_value = get_variable(variables, var_count, right);
         }
         parse_operand(right, &right_value, variables, var_count);
         return handle_operators(op, left_value, right_value);
@@ -581,10 +602,10 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                     } else {
                         char var_name[64];
                         if(sscanf(echo_content, "%63s", var_name) == 1){
-                            Variable var = get_variable(var_name, variables, var_count, var_name);
+                            Variable var = get_variable(variables, var_count, var_name);
                             switch(var.type){
                                 case VAR_STRING:
-                                    if(var.value.string_value && var.value.string_value[0]) printf("%s\n", var.value.string_value);
+                                    if(var.value.string_value[0]) printf("%s\n", var.value.string_value);
                                     break;
                                 case VAR_NUMBER:
                                     printf("%g\n", var.value.number_value);
@@ -725,6 +746,8 @@ int main(int argc, char **argv){
     }
     *command = '\0';
 
+    setup_signals();
+
     while(running){
         char prompt[256];
         char *user = getenv("USER");
@@ -732,7 +755,8 @@ int main(int argc, char **argv){
         gethostname(hostname, sizeof(hostname));
         char cwd[256];
         getcwd(cwd, sizeof(cwd));
-        snprintf(prompt, sizeof(prompt), "\033[1;36m%s@%s[XX]:\033[1;34m%s\033[0m$ ", user ? user : "user", hostname, cwd);
+        snprintf(prompt, sizeof(prompt), "\033[1;36m%.31s@%.63s[XX]:\033[1;34m%.127s\033[0m$ ",
+             user ? user : "user", hostname, cwd);
 
         printf("%s", prompt);
         fflush(stdout);
