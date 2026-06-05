@@ -275,6 +275,12 @@ int execute_command(char *command, bool *running){
                     if(strcmp(args[i], "|") == 0){
                         pipe_indices[pipe_count++] = i;
                         args[i] = NULL;
+                    }else if(strcmp(args[i], ">>") == 0){
+                        printf("\033[1;31mOutput redirection is not supported yet.\033[0m\n");
+                        return -1;
+                    }else if(strcmp(args[i], ">") == 0){
+                        printf("\033[1;31mOutput redirection is not supported yet.\033[0m\n");
+                        return -1;
                     }
                 }
 
@@ -712,10 +718,23 @@ int main(int argc, char **argv){
     greeting();
     srand((unsigned int)time(NULL));
     
-    char command[MAX_COMMAND_LENGTH];
+    char * command = malloc(1);
+    if(command == NULL) {
+        fprintf(stderr, "Error: Failed to allocate memory for command\n");
+        return 1;
+    }
+    *command = '\0';
 
     while(running){
-        printf("XX> ");
+        char prompt[256];
+        char *user = getenv("USER");
+        char hostname[256];
+        gethostname(hostname, sizeof(hostname));
+        char cwd[256];
+        getcwd(cwd, sizeof(cwd));
+        snprintf(prompt, sizeof(prompt), "\033[1;36m%s@%s[XX]:\033[1;34m%s\033[0m$ ", user ? user : "user", hostname, cwd);
+
+        printf("%s", prompt);
         fflush(stdout);
 
         char * input = readline("");
@@ -730,8 +749,12 @@ int main(int argc, char **argv){
             while(*trimmed && isspace((unsigned char)*trimmed)) trimmed++;
 
             if(*trimmed != '\0'){
-                strncpy(command, trimmed, sizeof(command) - 1);
-                command[sizeof(command) - 1] = '\0';
+                command = realloc(command, strlen(trimmed) + 1);
+                if(command == NULL) {
+                    fprintf(stderr, "Error: Failed to allocate memory for command\n");
+                    break;
+                }
+                strcpy(command, trimmed);
                 execute_command(command, &running);
             }
 
@@ -739,6 +762,7 @@ int main(int argc, char **argv){
         }
         free(input);
     }
+    free(command);
     return 0;
 }
 #endif // MAIN_C
