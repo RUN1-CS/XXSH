@@ -300,17 +300,35 @@ int execute_command(char *command, bool *running){
                         pipe_indices[pipe_count++] = i;
                         args[i] = NULL;
                     }else if(strcmp(args[i], ">>") == 0){
+                        if(i + 1 >= argc || args[i + 1] == NULL){
+                            fprintf(stderr, "syntax error near unexpected token '>>'\n");
+                            return -1;
+                        }
                         fd = open(args[i + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
                         if(fd == -1){
                             perror("open");
                             return -1;
                         }
+                        for(int j = i; j + 2 <= argc; j++){
+                            args[j] = args[j + 2];
+                        }
+                        argc -= 2;
+                        i--;
                     }else if(strcmp(args[i], ">") == 0){
+                        if(i + 1 >= argc || args[i + 1] == NULL){
+                            fprintf(stderr, "syntax error near unexpected token '>'\n");
+                            return -1;
+                        }
                         fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
                         if(fd == -1){
                             perror("open");
                             return -1;
                         }
+                        for(int j = i; j + 2 <= argc; j++){
+                            args[j] = args[j + 2];
+                        }
+                        argc -= 2;
+                        i--;
                     }
                 }
 
@@ -341,8 +359,8 @@ int execute_command(char *command, bool *running){
                     int pid_count = 0;
 
                     for(int i = 0; i <= pipe_count; i++){
-                        int fd[2] = {-1, -1};
-                        if(i < pipe_count && pipe(fd) == -1){
+                        int pipefd[2] = {-1, -1};
+                        if(i < pipe_count && pipe(pipefd) == -1){
                             perror("pipe");
                             return -1;
                         }
@@ -357,10 +375,12 @@ int execute_command(char *command, bool *running){
                             signal(SIGCHLD, SIG_DFL);
 
                             if(prev_read != -1) dup2(prev_read, STDIN_FILENO);
-                            if(i < pipe_count) dup2(fd[1], STDOUT_FILENO);
+                            if(i < pipe_count) dup2(pipefd[1], STDOUT_FILENO);
+                            if(i == pipe_count && fd != -1) dup2(fd, STDOUT_FILENO);
 
                             if(prev_read != -1) close(prev_read);
-                            if(i < pipe_count){ close(fd[0]); close(fd[1]); }
+                            if(i < pipe_count){ close(pipefd[0]); close(pipefd[1]); }
+                            if(i == pipe_count && fd != -1) close(fd);
 
                             execvp(args[cmd_start], &args[cmd_start]);
                             perror("execvp");
@@ -369,8 +389,8 @@ int execute_command(char *command, bool *running){
                             pids[pid_count++] = pid;
                             if(prev_read != -1) close(prev_read);
                             if(i < pipe_count){
-                                close(fd[1]);
-                                prev_read = fd[0];
+                                close(pipefd[1]);
+                                prev_read = pipefd[0];
                             } else {
                                 prev_read = -1;
                             }
@@ -378,7 +398,7 @@ int execute_command(char *command, bool *running){
                         } else {
                             perror("fork");
                             if(prev_read != -1) close(prev_read);
-                            if(i < pipe_count){ close(fd[0]); close(fd[1]); }
+                            if(i < pipe_count){ close(pipefd[0]); close(pipefd[1]); }
                             return -1;
                         }
                     }
