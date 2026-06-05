@@ -21,17 +21,18 @@
 
 #define _POSIX_C_SOURCE 200809L
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <time.h>
-#include <signal.h>
-#include <fcntl.h>
+#include <stdio.h> // Main header for input/output functions
+#include <stdlib.h> // For memory management, process control, conversions
+#include <string.h> // For string manipulation functions (Mainly for the parser)
+#include <unistd.h> // For POSIX API access (e.g., fork, exec, chdir)
+#include <time.h> // For greeting message based on time of day
+#include <signal.h> // For handling signals (e.g., Ctrl+C)
+#include <fcntl.h> // For file control options (e.g., open flags)
 
-#include <sys/wait.h>
-#include <sys/types.h>
+#include <sys/wait.h> // For waiting on child processes
+#include <sys/types.h> // For data types used in system calls (e.g., pid_t)
 
+// QoL just for me and jokes
 #define bool int
 #define true 1
 #define false 0
@@ -39,10 +40,10 @@
 
 #define VAR_LIMIT 100 // Later will be dynamic, I am just too lazy to implement that right now
 
-#include <readline/readline.h>
-#include <readline/history.h>
+#include <readline/readline.h> // For command line editing and history
+#include <readline/history.h> // For maintaining command history
 
-#define MAX_COMMAND_LENGTH 1024
+#define MAX_COMMAND_LENGTH 1024 // Max length of a command line
 
 // License notice, GPL 3.0 compatible
 void license_notice(){
@@ -52,15 +53,20 @@ void license_notice(){
     printf("under certain conditions; type `show c' for details.\n");
 }
 
+// Unified prompt generator
 char * get_prompt(){
     char prompt[256];
+    // Username
     char *user = getenv("USER");
+    // Hostname
     char hostname[256];
     gethostname(hostname, sizeof(hostname));
+    // Current working directory
     char cwd[256];
     getcwd(cwd, sizeof(cwd));
     snprintf(prompt, sizeof(prompt), "\033[1;36m%.31s@%.63s[XX]:\033[1;34m%.127s\033[0m$ ",
             user ? user : "user", hostname, cwd);
+    // strdup is used to return a dynamically allocated string that can be safely used by readline and freed later
     return strdup(prompt);
 }
 
@@ -88,30 +94,30 @@ void setup_signals() {
     sigaction(SIGTERM, &sa, NULL);
 }
 
+// Variable types
 enum VariableType {
     VAR_STRING,
     VAR_NUMBER,
     VAR_BOOL
 };
 
+// Union to hold different types of variable values
 union VariableValue {
     char string_value[256];
     double number_value;
     bool bool_value;
 };
 
+// Struct to represent a variable with its name, type, and value
 typedef struct Variable {
     char name[64];
     enum VariableType type;
     union VariableValue value;
 } Variable;
 
+// Function to set a variable based on a command line input
 void set_variable(const char *line, Variable *variables, int *var_count){
-    FILE *DEBUG_LOG = fopen("debug.log", "a");
-    if(DEBUG_LOG) {
-        fprintf(DEBUG_LOG, "DEBUG: Setting variable with line: %s\n", line);
-    }
-
+    // Temporary buffers to hold parsed name, type, and value
     char name[64];
     char value[256];
     char type[16];
@@ -121,6 +127,7 @@ void set_variable(const char *line, Variable *variables, int *var_count){
         printf("\033[1;31mUsage: set <variable> <type> = <value>\033[0m\n");
         return;
     }
+    // Checking types
     if(strcmp(type, "string") == 0){
         strncpy(type, "string", sizeof(type) - 1);
     }else if(strcmp(type, "number") == 0){
@@ -162,11 +169,9 @@ void set_variable(const char *line, Variable *variables, int *var_count){
                     variables[i].value.bool_value = (strcmp(value, "true") == 0);
                     break;
             }
-            fprintf(DEBUG_LOG, "DEBUG: Updated variable '%s' to '%s' with type %d\n", name, value, variables[i].type);
             return;
         }
     }
-    fprintf(DEBUG_LOG, "DEBUG: Adding new variable '%s' with value '%s' and type %s\n", name, value, type);
     // Add new variable
     if(*var_count < VAR_LIMIT){
         strncpy(variables[*var_count].name, name, sizeof(variables[*var_count].name));
@@ -184,12 +189,10 @@ void set_variable(const char *line, Variable *variables, int *var_count){
                 variables[*var_count].value.bool_value = (strcmp(value, "true") == 0);
                 break;
         }
-        fprintf(DEBUG_LOG, "DEBUG: Set variable '%s' to '%s' with type %d\n", name, value, variables[*var_count].type);
         (*var_count)++;
     } else {
         printf("\033[1;31mVariable limit reached (%d)\033[0m\n", VAR_LIMIT);
     }
-    fclose(DEBUG_LOG);
 }
 
 // Check for special built-in commands that don't require forking
@@ -260,9 +263,10 @@ void greeting(){
 // Execute a command with optional piping
 int execute_command(char *command, bool *running){
     char *saveptr = NULL;
-    char *segment = strtok_r(command, ";", &saveptr);
+    char *segment = strtok_r(command, ";", &saveptr); // Splitting by ';' to allow multiple commands in one line
 
     while(segment != NULL){
+        // Trim leading and trailing whitespace
         while(*segment == ' ' || *segment == '\t') segment++;
         char *end = segment + strlen(segment);
         while(end > segment && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n')) *--end = '\0';
@@ -272,6 +276,7 @@ int execute_command(char *command, bool *running){
             int argc = 0;
             char *token = strtok(segment, " \t");
 
+            // Tokenize the command into arguments, respecting the maximum command length
             while(token != NULL && argc < (MAX_COMMAND_LENGTH / 2)){
                 args[argc++] = token;
                 token = strtok(NULL, " \t");
@@ -279,6 +284,7 @@ int execute_command(char *command, bool *running){
             args[argc] = NULL;
 
             if(argc > 0){
+                // Check for special built-in commands that don't require forking
                 if(specials(args[0], (argc > 1) ? args[1] : NULL, running)){
                     segment = strtok_r(NULL, ";", &saveptr);
                     continue;
@@ -291,8 +297,10 @@ int execute_command(char *command, bool *running){
                     continue;
                 }
 
+                // Initialize file descriptor for redirection
                 int fd = -1;
 
+                // First pass to handle redirection and find pipe positions
                 int pipe_indices[argc];
                 int pipe_count = 0;
                 for(int i = 0; i < argc; i++){
@@ -332,6 +340,7 @@ int execute_command(char *command, bool *running){
                     }
                 }
 
+                // If there are no pipes, we can execute the command directly
                 if(pipe_count == 0){
                     pid_t pid = fork();
                     if(pid == 0){
@@ -353,6 +362,7 @@ int execute_command(char *command, bool *running){
                         return -1;
                     }
                 } else {
+                    // Handle piped commands
                     int cmd_start = 0;
                     int prev_read = -1;
                     pid_t pids[pipe_count + 1];
@@ -367,6 +377,8 @@ int execute_command(char *command, bool *running){
 
                         pid_t pid = fork();
                         if(pid == 0){
+                            // Child process
+                            // Reset signal handlers to default in child processes to allow proper signal handling (e.g., Ctrl+C to kill the process)
                             signal(SIGINT, SIG_DFL);
                             signal(SIGQUIT, SIG_DFL);
                             signal(SIGTSTP, SIG_DFL);
@@ -374,6 +386,7 @@ int execute_command(char *command, bool *running){
                             signal(SIGTTOU, SIG_DFL);
                             signal(SIGCHLD, SIG_DFL);
 
+                            // Set up input and output for the current command
                             if(prev_read != -1) dup2(prev_read, STDIN_FILENO);
                             if(i < pipe_count) dup2(pipefd[1], STDOUT_FILENO);
                             if(i == pipe_count && fd != -1) dup2(fd, STDOUT_FILENO);
@@ -382,10 +395,12 @@ int execute_command(char *command, bool *running){
                             if(i < pipe_count){ close(pipefd[0]); close(pipefd[1]); }
                             if(i == pipe_count && fd != -1) close(fd);
 
+                            // Execute the command
                             execvp(args[cmd_start], &args[cmd_start]);
                             perror("execvp");
                             exit(EXIT_FAILURE);
                         } else if(pid > 0){
+                            // Parent process
                             pids[pid_count++] = pid;
                             if(prev_read != -1) close(prev_read);
                             if(i < pipe_count){
@@ -394,6 +409,7 @@ int execute_command(char *command, bool *running){
                             } else {
                                 prev_read = -1;
                             }
+                            // Update cmd_start for the next command in the pipeline
                             cmd_start = (i < pipe_count) ? pipe_indices[i] + 1 : cmd_start;
                         } else {
                             perror("fork");
@@ -403,6 +419,7 @@ int execute_command(char *command, bool *running){
                         }
                     }
 
+                    // Wait for all child processes in the pipeline to finish
                     for(int i = 0; i < pid_count; i++){
                         int status = 0;
                         waitpid(pids[i], &status, 0);
@@ -414,13 +431,16 @@ int execute_command(char *command, bool *running){
             }
         }
 
+        // Move to the next command segment separated by ';'
         segment = strtok_r(NULL, ";", &saveptr);
     }
 
     return 0;
 }
 
+// Handling logical operators for conditions and loops
 bool handle_operators(char *op, Variable left, Variable right){
+    // Ofc we have to respect data types, otherwise it would be a mess
     if(strcmp(op, "==") == 0){
         if(left.type == VAR_NUMBER || right.type == VAR_NUMBER){
             return left.value.number_value == right.value.number_value;
@@ -440,6 +460,7 @@ bool handle_operators(char *op, Variable left, Variable right){
     return false;
 }
 
+// Function to get a variable by its name
 Variable get_variable(Variable *variables, int * var_count, char * src){
     // It's a variable, we can look it up
     for(int i = 0; i < *var_count; i++){
@@ -447,15 +468,11 @@ Variable get_variable(Variable *variables, int * var_count, char * src){
             return variables[i];
         }
     }
-    FILE *DEBUG_LOG = fopen("debug.log", "a");
-    if(DEBUG_LOG) {
-        fprintf(DEBUG_LOG, "DEBUG: Variable '%s' not found, returning NULL\n", src);
-        fclose(DEBUG_LOG);
-    }
     
     return (Variable){0}; // Return NULL if variable not found
 }
 
+// Function to parse an operand, which can be a literal or a variable, and store its value in a Variable struct
 void parse_operand(char *operand, Variable *value, Variable *variables, int *var_count){
     if(operand[0] >= '0' && operand[0] <= '9'){
         // It's a number, we can convert it to a string for comparison
@@ -478,6 +495,7 @@ void parse_operand(char *operand, Variable *value, Variable *variables, int *var
     }
 }
 
+// Checking for literals (numbers, booleans, and string literals) to differentiate them from variable names
 bool is_literal(const char *str) {
     if (str[0] >= '0' && str[0] <= '9') return true;
     if (strcmp(str, "true") == 0 || strcmp(str, "false") == 0) return true;
@@ -485,17 +503,20 @@ bool is_literal(const char *str) {
     return false;
 }
 
+// Handling conditions for if/elif/else statements
 bool handle_condition(char line[MAX_COMMAND_LENGTH], Variable *variables, int *var_count){
     char type[8] = {0};
     char left[256] = {0};
     char op[8] = {0};
     char right[256] = {0};
 
+    // Syntax for conditions: if <left> <operator> <right>
     if(sscanf(line, "%7s %255s %7s %255s", type, left, op, right) < 1) return false;
 
+    // Else branch is simple
     if(strcmp(type, "else") == 0){
         return true;
-    }else if(strcmp(type, "if") == 0 || strcmp(type, "elif") == 0){
+    }else if(strcmp(type, "if") == 0 || strcmp(type, "elif") == 0){ // but these mfs ain't
         if(left[0] == '\0' || op[0] == '\0' || right[0] == '\0') return false;
         Variable left_value = {0};
         if (!is_literal(left)) {
@@ -512,6 +533,7 @@ bool handle_condition(char line[MAX_COMMAND_LENGTH], Variable *variables, int *v
     return false;
 }
 
+// Loop handling, syntax: loop <left> <operator> <right>
 bool handle_loop(char line[MAX_COMMAND_LENGTH], Variable *variables, int *var_count){
     char type[8] = {0};
     char left[256] = {0};
@@ -537,6 +559,7 @@ bool handle_loop(char line[MAX_COMMAND_LENGTH], Variable *variables, int *var_co
     return false;
 }
 
+// Loop struct to keep track of loop state for nested loops
 typedef struct Loop{
     int depth;
     int start_line;
@@ -544,14 +567,11 @@ typedef struct Loop{
     char condition[MAX_COMMAND_LENGTH];
 } Loop;
 
-// Interpret (WIP) and run a script file
+// Interpreter and run a script file
 void run_script(const char *filename, bool *running, Variable *variables, int *var_count){
+    // Well, we have to open the file first
     FILE *file = fopen(filename, "r");
     if(!file) return;
-    FILE *DEBUG_LOG = fopen("debug.log", "a");
-    if(DEBUG_LOG) {
-        fprintf(DEBUG_LOG, "Running script: %s\n", filename);
-    }
 
     char line[MAX_COMMAND_LENGTH];
     bool script_running = *running; // Temporary flag for the script session
@@ -562,11 +582,15 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
     Loop loops[100]; // Assuming a maximum of 100 nested loops
     int loop_count = 0;
 
+    // Line counter for error reporting and loop handling
     int line_counter = 0;
 
+    // Counter for opened 'if' statements to detect unclosed blocks at the end of the script
     int opened_ifs = 0;
 
+    // Yay, reading (it's not manga, unfortunately)
     while(fgets(line, sizeof(line), file)){
+        // It's the same as normal logic
         line_counter++;
         char *saveptr = NULL;
         char *segment = strtok_r(line, "\n", &saveptr);
@@ -582,8 +606,7 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                     continue;
                 }
 
-                fprintf(DEBUG_LOG, "DEBUG: Processing line: %s\n", trimmed);
-
+                // But here it changes, we handle conditions and loops here
                 if(strcmp(trimmed, "endif") == 0){
                     skip_until_endif = false;
                     handle_elif = false;
@@ -591,15 +614,19 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                     command = strtok_r(NULL, ";", &cmd_save);
                     continue;
                 }
+                // Speciality ofc
                 if(strncmp(trimmed, "#!", 2) == 0){
                     command = strtok_r(NULL, ";", &cmd_save);
                     continue;
                 }
+                // If we are currently skipping commands until we find an 'endif', we just ignore everything until then
                 if(skip_until_endif){
                     command = strtok_r(NULL, ";", &cmd_save);
                     continue;
                 }
+                // Setting a variable is also a special command that doesn't require forking, so we handle it here as well
                 if(strncmp(trimmed, "set", 3) == 0){ set_variable(trimmed, variables, var_count); command = strtok_r(NULL, ";", &cmd_save); continue; }
+                // And ofc we have to handle increase and decrease commands for numbers, otherwise it would be a pain to do it with 'set' every time
                 if(strncmp(trimmed, "increase", 8) == 0 || strncmp(trimmed, "inc", 3) == 0){
                     char var_name[64];
                     if(sscanf(trimmed, "%*s %63s", var_name) == 1){
@@ -614,6 +641,7 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                     }
                     command = strtok_r(NULL, ";", &cmd_save); continue;
                 }
+                // Echoes, scawy, especially because of variables
                 if(strncmp(trimmed, "echo", 4) == 0){
                     char *echo_content = trimmed + 4;
                     while(*echo_content && isspace((unsigned char)*echo_content)) echo_content++;
@@ -655,6 +683,7 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                     continue;
                 }
 
+                // Exporting a path to PATH variable, it's a shell after all
                 if(strncmp(trimmed, "export_path", 11) == 0){
                     char value[256];
                     if(sscanf(trimmed, "export_path %[^\n]", value) == 1){
@@ -676,6 +705,7 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
                     continue;
                 }
 
+                // Handling conditions and loops
                 if(strncmp(trimmed, "if ", 3) == 0 || (handle_elif && strncmp(trimmed, "elif", 4) == 0)){
                     if(strncmp(trimmed, "if ", 3) == 0) opened_ifs++;
                     bool condition_ok = handle_condition(trimmed, variables, var_count);
@@ -741,10 +771,10 @@ void run_script(const char *filename, bool *running, Variable *variables, int *v
             segment = strtok_r(NULL, "\n", &saveptr);
         }
     }
+    // Please close your ifs
     if(opened_ifs > 0){
         printf("\033[1;31mError: %d unclosed 'if' statement(s) detected in script %s\033[0m\n", opened_ifs, filename);
     }
-    fclose(DEBUG_LOG);
     fclose(file);
 }
 
@@ -781,6 +811,7 @@ int main(int argc, char **argv){
 
     setup_signals();
 
+    // Main loop for interactive mode
     while(running){
         char *prompt = get_prompt();
         char * input = readline(prompt);
@@ -812,3 +843,4 @@ int main(int argc, char **argv){
     return 0;
 }
 #endif // MAIN_C
+// Home sweet home. Btw if you read all the comments, find better things to do in your life.

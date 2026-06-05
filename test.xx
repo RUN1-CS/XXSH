@@ -1,3 +1,8 @@
+# Some tests cause mess, like test 05 is an infinite loop and test 13 creates a file.
+# These tests are commented, uncomment them in order to test them.
+
+# A collection of tests that I am using to... well test stuff.
+
 echo "Test 01, specials -> easter eggs";
 ./xxsh ./tests/01_easter_eggs.xx;
 echo "Test 02, License notices";
@@ -22,3 +27,5 @@ echo "Test 11, infinite loop"
 ./xxsh ./tests/11_infinite.xx
 echo "Test 12, orphan?"
 ./xxsh ./tests/12_orphan.xx
+#echo "Test 13, redirecting"
+#./xxsh ./tests/13_redirecting.xx
