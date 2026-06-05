@@ -52,10 +52,23 @@ void license_notice(){
     printf("under certain conditions; type `show c' for details.\n");
 }
 
+char * get_prompt(){
+    char prompt[256];
+    char *user = getenv("USER");
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    char cwd[256];
+    getcwd(cwd, sizeof(cwd));
+    snprintf(prompt, sizeof(prompt), "\033[1;36m%.31s@%.63s[XX]:\033[1;34m%.127s\033[0m$ ",
+            user ? user : "user", hostname, cwd);
+    return strdup(prompt);
+}
+
 // Signal handler (e.g., for Ctrl+C)
 void handle_sig(int sig){
     if(sig == SIGINT){
-        printf("XX> ");
+        char *prompt = get_prompt();
+        printf("\n%s", prompt);
         fflush(stdout);
     }
 }
@@ -749,19 +762,8 @@ int main(int argc, char **argv){
     setup_signals();
 
     while(running){
-        char prompt[256];
-        char *user = getenv("USER");
-        char hostname[256];
-        gethostname(hostname, sizeof(hostname));
-        char cwd[256];
-        getcwd(cwd, sizeof(cwd));
-        snprintf(prompt, sizeof(prompt), "\033[1;36m%.31s@%.63s[XX]:\033[1;34m%.127s\033[0m$ ",
-             user ? user : "user", hostname, cwd);
-
-        printf("%s", prompt);
-        fflush(stdout);
-
-        char * input = readline("");
+        char *prompt = get_prompt();
+        char * input = readline(prompt);
         if(input == NULL) { printf("\n"); break; }
         if(strlen(input) == 0) { free(input); continue; }
         if(input && *input) add_history(input);
