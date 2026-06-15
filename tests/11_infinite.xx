@@ -1,5 +1,0 @@
-set counter number = 0;
-loop counter < 1000
-    increase counter;
-endloop;
-echo "Survived 1000 increments";

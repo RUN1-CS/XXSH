@@ -6,13 +6,7 @@
 #endif
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
 #ifndef MAX_COMMAND_LENGTH
 #define MAX_COMMAND_LENGTH 1024
@@ -32,46 +26,9 @@ void license_notice(){
     printf("under certain conditions; type `show c' for details.\n");
 }
 
-// Unified prompt generator
-char * get_prompt(){
-    char prompt[256];
-    // Username
-    char *user = getenv("USER");
-    // Hostname
-    char hostname[256];
-    gethostname(hostname, sizeof(hostname));
-    // Current working directory
-    char cwd[256];
-    getcwd(cwd, sizeof(cwd));
-    snprintf(prompt, sizeof(prompt), "\033[1;36m%.31s@%.63s[XX]:\033[1;34m%.127s\033[0m$ ",
-            user ? user : "user", hostname, cwd);
-    // strdup is used to return a dynamically allocated string that can be safely used by readline and freed later
-    return strdup(prompt);
-}
-
 // Check for special built-in commands that don't require forking
 bool specials(const char * command, const char *arg, bool *running){
     if(strcmp(command, "exit") == 0) { *running = false; return true; } // Exit command
-
-    // Oshi no Ko Easter Egg
-    if(strcmp(command, "45510") == 0){
-        printf("\033[1;35m[Even if it's a lie, I wanted it to be the truth.]\033[0m\n");
-        return true;
-    }
-
-    // Eighty Six Easter Egg
-    if(strcmp(command, "86") == 0){
-        printf("\033[1;31m[We will fight, and we will move forward.]\033[0m\n");
-        return true;
-    }
-
-    // Darling in the Franxx Easter Egg
-    if(strcmp(command, "02") == 0){
-        int rnd = rand() % 2;
-        if(rnd == 0) printf("\033[1;95m[If you don't take a risk, you can't create a future.]\033[0m\n");
-        else printf("\033[1;95m[If you don't belong here, just build a place where you do.]\033[0m\n");
-        return true;
-    }
 
     // Show command for license and credits (GPL 3.0 compatible)
     if(strcmp(command, "show") == 0){
@@ -96,32 +53,10 @@ bool specials(const char * command, const char *arg, bool *running){
     return false;
 }
 
-// Signal handler (e.g., for Ctrl+C)
-void handle_sig(int sig){
-    if(sig == SIGINT){
-        char *prompt = get_prompt();
-        printf("\n%s", prompt);
-        fflush(stdout);
-    }
-}
-
-// Setup signal handlers for the shell
-void setup_signals() {
-    struct sigaction sa;
-    sa.sa_handler = handle_sig;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART; // Keeps system calls like read() from failing
-
-    // Handle Ctrl+C (Interrupt)
-    sigaction(SIGINT, &sa, NULL);
-    
-    // Handle 'kill' (Termination) - usually you want a clean exit here
-    sa.sa_handler = SIG_DFL; // Or a custom cleanup function
-    sigaction(SIGTERM, &sa, NULL);
-}
-
 // Execute a command with optional piping
 int execute_command(char *command, bool *running){
+    printf("Can't execute commands yet, kernel is still being developed.\n");
+    /*
     char *saveptr = NULL;
     char *segment = strtok_r(command, ";", &saveptr); // Splitting by ';' to allow multiple commands in one line
 
@@ -295,6 +230,7 @@ int execute_command(char *command, bool *running){
         segment = strtok_r(NULL, ";", &saveptr);
     }
 
+    */
     return 0;
 }
 

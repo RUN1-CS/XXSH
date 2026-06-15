@@ -4,14 +4,8 @@ CC = gcc
 # Compiler flags
 CFLAGS = -Wall -Wextra -O2 -g -MMD -MP
 
-# Linker flags
-LDFLAGS = -lreadline
-
 # Source files
-SOURCES = main.c executor.c \
-	interpreter/evaulation.c \
-	interpreter/parser.c \
-	interpreter/variables.c
+SOURCES = main.c executor.c
 
 # Object files
 OBJECTS = $(SOURCES:.c=.o)
@@ -22,14 +16,11 @@ DEPS = $(SOURCES:.c=.d)
 all: xxsh
 
 xxsh: $(OBJECTS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^
 
 -include $(DEPS)
 
 %.o: %.c
-	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
-
-interpreter/%.o: interpreter/%.c
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 clean:

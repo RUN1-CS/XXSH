@@ -1,2 +1,0 @@
-set x number = 2;
-if 2 == x echo "One liner, part 1"; echo "One liner part 2"; endif;

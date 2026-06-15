@@ -1,6 +1,0 @@
-set x number = 5;
-
-if x == 5
-    echo "x is: ";
-    echo x;
-endif;
