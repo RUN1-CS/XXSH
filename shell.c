@@ -19,8 +19,8 @@
 #ifndef MAIN_C
 #define MAIN_C
 
-#include <stdio.h>
 #include <string.h> // For string manipulation functions (Mainly for the parser)
+#include "../../kernel/drivers/video.h"
 
 // QoL just for me and jokes
 #define bool int
@@ -30,17 +30,18 @@
 
 #define MAX_COMMAND_LENGTH 1024 // Max length of a command line
 
+#include "shell.h"
 #include "executor.h"
 
 // Greeting message
 void greeting(){
     // Print greeting
-    printf("\033[1;32mWelcome to XXSH.\033[0m\n");
+    str_print("\033[1;32mWelcome to XXSH.\033[0m\n");
 }
 
-int main(int argc, char **argv){
+int xxsh_loop(){
     // 1. Startup logic
-    bool running = true;
+    //bool running = true;
 
     //getenv("PATH");
 
@@ -54,7 +55,7 @@ int main(int argc, char **argv){
     /*
     while(running){
         char * input = readline("\033[1;34mXXSH> \033[0m");
-        if(input == NULL) { printf("\n"); break; }
+        if(input == NULL) { str_print("\n"); break; }
         if(strlen(input) == 0) { free(input); continue; }
         if(input && *input) add_history(input);
         

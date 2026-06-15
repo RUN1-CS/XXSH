@@ -5,8 +5,8 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include <stdio.h>
 #include <string.h>
+#include "../../kernel/drivers/video.h"
 
 #ifndef MAX_COMMAND_LENGTH
 #define MAX_COMMAND_LENGTH 1024
@@ -20,10 +20,10 @@
 
 // License notice, GPL 3.0 compatible
 void license_notice(){
-    printf("XXSH  Copyright (C) 2026  RUN1/RUN1-CS\n");
-    printf("This program comes with ABSOLUTELY NO WARRANTY; for details type `show w'.\n");
-    printf("This is free software, and you are welcome to redistribute it\n");
-    printf("under certain conditions; type `show c' for details.\n");
+    str_print("XXSH  Copyright (C) 2026  RUN1/RUN1-CS\n");
+    str_print("This program comes with ABSOLUTELY NO WARRANTY; for details type `show w'.\n");
+    str_print("This is free software, and you are welcome to redistribute it\n");
+    str_print("under certain conditions; type `show c' for details.\n");
 }
 
 // Check for special built-in commands that don't require forking
@@ -35,18 +35,18 @@ bool specials(const char * command, const char *arg, bool *running){
         if(arg == NULL){
             license_notice();
         } else if(strcmp(arg, "w") == 0){
-            printf("\033[1;34mThis program is distributed in the hope that it will be useful,\n");
-            printf("but WITHOUT ANY WARRANTY; without even the implied warranty of\n");
-            printf("MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n");
-            printf("GNU General Public License for more details.\033[0m\n");
+            str_print("\033[1;34mThis program is distributed in the hope that it will be useful,\n");
+            str_print("but WITHOUT ANY WARRANTY; without even the implied warranty of\n");
+            str_print("MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n");
+            str_print("GNU General Public License for more details.\033[0m\n");
         } else if(strcmp(arg, "c") == 0){
-            printf("\033[1;36mYou can redistribute it and/or modify,\n");
-            printf("under these conditions:\n");
-            printf("1. You must give credit to the original author (RUN1/RUN1-CS).\n");
-            printf("2. You must include this license notice in any copies or substantial portions of the software.\n");
-            printf("\033[0m");
+            str_print("\033[1;36mYou can redistribute it and/or modify,\n");
+            str_print("under these conditions:\n");
+            str_print("1. You must give credit to the original author (RUN1/RUN1-CS).\n");
+            str_print("2. You must include this license notice in any copies or substantial portions of the software.\n");
+            str_print("\033[0m");
         } else {
-            printf("\033[1;31mUnknown argument for show: %s\033[0m\n", arg);
+            str_print("\033[1;31mUnknown argument for show.\033[0m\n");
         }
         return true;
     }
@@ -55,7 +55,7 @@ bool specials(const char * command, const char *arg, bool *running){
 
 // Execute a command with optional piping
 int execute_command(char *command, bool *running){
-    printf("Can't execute commands yet, kernel is still being developed.\n");
+    str_print("Can't execute commands yet, kernel is still being developed.\n");
     /*
     char *saveptr = NULL;
     char *segment = strtok_r(command, ";", &saveptr); // Splitting by ';' to allow multiple commands in one line
