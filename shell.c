@@ -36,7 +36,7 @@
 // Greeting message
 void greeting(){
     // Print greeting
-    str_print("\033[1;32mWelcome to XXSH.\033[0m\n");
+    str_print("Welcome to XXSH.\n");
 }
 
 int xxsh_loop(){
