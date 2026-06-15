@@ -8,7 +8,10 @@ CFLAGS = -Wall -Wextra -O2 -g -MMD -MP
 LDFLAGS = -lreadline
 
 # Source files
-SOURCES = main.c
+SOURCES = main.c executor.c \
+	interpreter/evaulation.c \
+	interpreter/parser.c \
+	interpreter/variables.c
 
 # Object files
 OBJECTS = $(SOURCES:.c=.o)
@@ -24,6 +27,9 @@ xxsh: $(OBJECTS)
 -include $(DEPS)
 
 %.o: %.c
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+interpreter/%.o: interpreter/%.c
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 clean:
