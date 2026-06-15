@@ -20,7 +20,9 @@
 #define MAIN_C
 
 #include <string.h> // For string manipulation functions (Mainly for the parser)
+#include "../../kernel/drivers/string.h"
 #include "../../kernel/drivers/video.h"
+#include "../../kernel/drivers/keyboard.h"
 
 // QoL just for me and jokes
 #define bool int
@@ -41,23 +43,23 @@ void greeting(){
 
 int xxsh_loop(){
     // 1. Startup logic
-    //bool running = true;
+    bool running = true;
 
     //getenv("PATH");
 
     // 2. INTERACTIVE MODE
+    license_notice();
     greeting();
     
-    //char command[MAX_COMMAND_LENGTH];
-    //command[0] = '\0';
+    char command[MAX_COMMAND_LENGTH];
+    command[0] = '\0';
 
     // Main loop for interactive mode
-    /*
+
     while(running){
-        char * input = readline("\033[1;34mXXSH> \033[0m");
-        if(input == NULL) { str_print("\n"); break; }
-        if(strlen(input) == 0) { free(input); continue; }
-        if(input && *input) add_history(input);
+        char input[KEYBOARD_BUFFER_SIZE];
+        readline("XXSH> ", input);
+        if(strlen(input) == 0) { continue; }
         
         char *saveptr = NULL;
         char *segment = strtok_r(input, ";", &saveptr);
@@ -72,9 +74,7 @@ int xxsh_loop(){
 
             segment = strtok_r(NULL, ";", &saveptr);
         }
-        free(input);
     }
-    */
     return 0;
 }
 #endif // MAIN_C
