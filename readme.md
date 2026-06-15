@@ -1,6 +1,6 @@
-# XXSH — A tiny shell implemented in C
+# XXSH — A tiny shell + mini interpreter in C
 
-XXSH is a small, educational command-line shell written in C. It demonstrates a minimal interactive shell loop with line editing and history (via GNU readline), simple built-in commands, piping between processes, and a script mode for running command scripts.
+XXSH is a small, educational command-line shell written in C. It demonstrates a minimal interactive shell loop with line editing and history (via GNU readline), simple built-in commands, piping between processes, and a script mode for running command scripts. The project also includes a lightweight interpreter module used by script-based features.
 
 ## Features
 
@@ -9,6 +9,7 @@ XXSH is a small, educational command-line shell written in C. It demonstrates a 
 - Support for pipelines (e.g. `ls | grep foo`)
 - Script mode: run a plain-text script file of commands
 - Loads `~/.xxshrc` at startup if present
+- Includes an interpreter subsystem (`interpreter/`) with parsing, variables, and evaluation logic
 
 ## Requirements
 
@@ -55,6 +56,21 @@ make clean
 
 `test.xx` in this repository contains a tiny example script.
 
+## Running included test scripts
+
+Several sample scripts are provided under `tests/`:
+
+- `tests/01_easter_eggs.xx`
+- `tests/02_license.xx`
+- `tests/03_if.xx`
+- ... up to `tests/13_redirecting.xx`
+
+Run any of them with:
+
+```bash
+./xxsh tests/03_if.xx
+```
+
 ## Built-in commands and notes
 
 - `exit` — quit the shell
@@ -66,6 +82,14 @@ make clean
 The shell supports pipelines (using `|`) and executes external commands using `execvp`.
 
 If a file named `~/.xxshrc` exists, XXSH will run its commands at startup.
+
+## Project layout (high level)
+
+- `main.c`, `executor.c`, `executor.h` — shell loop and command execution
+- `interpreter/` — parser, evaluator, variables, and shared types
+- `tests/` — script examples for features and edge cases
+- `Makefile` — build rules
+- `LICENSE` — GPLv3 text
 
 ## Contributing
 
