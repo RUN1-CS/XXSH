@@ -19,10 +19,10 @@
 #ifndef MAIN_C
 #define MAIN_C
 
-#include <string.h> // For string manipulation functions (Mainly for the parser)
+#include "../../kernel/drivers/keyboard.h"
 #include "../../kernel/drivers/string.h"
 #include "../../kernel/drivers/video.h"
-#include "../../kernel/drivers/keyboard.h"
+// #include "../../kernel/drivers/time.h"
 
 // QoL just for me and jokes
 #define bool int
@@ -32,50 +32,58 @@
 
 #define MAX_COMMAND_LENGTH 1024 // Max length of a command line
 
-#include "shell.h"
 #include "executor.h"
+#include "shell.h"
 
 // Greeting message
-void greeting(){
-    // Print greeting
-    str_print("Welcome to XXSH.\n");
+void greeting() {
+  // Print greeting
+  str_print("Welcome to XXSH.\n");
 }
 
-int xxsh_loop(){
-    // 1. Startup logic
-    bool running = true;
+int xxsh_loop() {
+  // 1. Startup logic
+  bool running = true;
 
-    //getenv("PATH");
+  // getenv("PATH");
 
-    // 2. INTERACTIVE MODE
-    license_notice();
-    greeting();
-    
-    char command[MAX_COMMAND_LENGTH];
-    command[0] = '\0';
+  // 2. INTERACTIVE MODE
+  license_notice();
+  greeting();
 
-    // Main loop for interactive mode
+  char command[MAX_COMMAND_LENGTH];
+  command[0] = '\0';
 
-    while(running){
-        char input[KEYBOARD_BUFFER_SIZE];
-        readline("XXSH> ", input);
-        if(strlen(input) == 0) { continue; }
-        
-        char *saveptr = NULL;
-        char *segment = strtok_r(input, ";", &saveptr);
-        while(segment != NULL){
-            char *trimmed = segment;
-            while(*trimmed && isspace((unsigned char)*trimmed)) trimmed++;
+  // Main loop for interactive mode
 
-            if(*trimmed != '\0'){
-                strcpy(command, trimmed);
-                execute_command(command, &running);
-            }
-
-            segment = strtok_r(NULL, ";", &saveptr);
-        }
+  while (running) {
+    char input[KEYBOARD_BUFFER_SIZE];
+    char prompt[255];
+    // SystemDateTime sdt;
+    // snprintf(prompt, "XXSH (%d %d.%d. %d:%d:%d>", );
+    snprintf(prompt, "XXSH> ");
+    readline(prompt, input);
+    if (strlen(input) == 0) {
+      continue;
     }
-    return 0;
+
+    char *saveptr = NULL;
+    char *segment = strtok_r(input, ";", &saveptr);
+    while (segment != NULL) {
+      char *trimmed = segment;
+      while (*trimmed && isspace((unsigned char)*trimmed))
+        trimmed++;
+
+      if (*trimmed != '\0') {
+        strcpy(command, trimmed);
+        execute_command(command, &running);
+      }
+
+      segment = strtok_r(NULL, ";", &saveptr);
+    }
+  }
+  return 0;
 }
 #endif // MAIN_C
-// Home sweet home. Btw if you read all the comments, find better things to do in your life.
+// Home sweet home. Btw if you read all the comments, find better things to do
+// in your life.
