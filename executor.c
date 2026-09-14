@@ -9,6 +9,7 @@
 #include "../../kernel/drivers/power.h"
 #include "../../kernel/drivers/string.h"
 #include "../../kernel/drivers/video.h"
+#include "../../kernel/drivers/filesystem/disk.h"
 
 #ifndef MAX_COMMAND_LENGTH
 #define MAX_COMMAND_LENGTH 1024
@@ -75,7 +76,44 @@ bool commands(const char *command, const char *arg/*, bool *running */) {
       str_print("No argument provided for echo.\n");
     }
     return true;
-  } else {
+  } else if (strcmp(command, "rd") == 0) {
+    // Read a sector from disk and print its contents
+    if (arg != NULL) {
+      uint32_t lba = (uint32_t)atoi(arg);
+      uint8_t buffer[512];
+      ata_read_sector(lba, buffer);
+      for (int i = 0; i < 512; i++) {
+        char hex[3];
+        sprintf(hex, "%02X", buffer[i]);
+        str_print(hex);
+        if ((i + 1) % 16 == 0) {
+          str_print("\n");
+        } else {
+          str_print(" ");
+        }
+      }
+      str_print("\n");
+    } else {
+      str_print("No LBA provided for read_disk.\n");
+    }
+    return true;
+  } else if (strcmp(command, "wd") == 0) {
+    // Write a sector to disk with dummy data
+    if (arg != NULL) {
+      uint32_t lba = (uint32_t)atoi(arg);
+      uint8_t buffer[512];
+      for (int i = 0; i < 512; i++) {
+        buffer[i] = (uint8_t)i; // Fill with dummy data
+      }
+      ata_write_sector(lba, buffer);
+      str_print("Sector written successfully.\n");
+    } else {
+      str_print("No LBA provided for write_disk.\n");
+    }
+    return true;
+  }
+  
+  else {
     return false; // Not a built-in command
   }
 
