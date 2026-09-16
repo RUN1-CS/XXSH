@@ -17,13 +17,16 @@
 
 #include "types.h" // Include the types header for Variable and Loop definitions
 
-bool handle_loop(char line[MAX_COMMAND_LENGTH], Variable *variables, int *var_count);
+bool handle_loop(char line[MAX_COMMAND_LENGTH], Variable *variables,
+                 int *var_count);
 
-bool handle_condition(char line[MAX_COMMAND_LENGTH], Variable *variables, int *var_count);
+bool handle_condition(char line[MAX_COMMAND_LENGTH], Variable *variables,
+                      int *var_count);
 
 bool is_literal(const char *str);
 
-void parse_operand(char *operand, Variable *value, Variable *variables, int *var_count);
+void parse_operand(char *operand, Variable *value, Variable *variables,
+                   int *var_count);
 
 bool handle_operators(char *op, Variable left, Variable right);
 

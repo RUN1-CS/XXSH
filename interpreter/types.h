@@ -12,7 +12,7 @@
 #endif
 
 // Loop struct to keep track of loop state for nested loops
-typedef struct Loop{
+typedef struct Loop {
     int depth;
     int start_line;
     long file_pos;
@@ -20,11 +20,7 @@ typedef struct Loop{
 } Loop;
 
 // Variable types
-enum VariableType {
-    VAR_STRING,
-    VAR_NUMBER,
-    VAR_BOOL
-};
+enum VariableType { VAR_STRING, VAR_NUMBER, VAR_BOOL };
 
 // Union to hold different types of variable values
 union VariableValue {

@@ -3,9 +3,9 @@
 
 void license_notice();
 
-char * get_prompt();
+char *get_prompt();
 
-bool specials(const char * command, const char *arg, bool *running);
+bool specials(const char *command, const char *arg, bool *running);
 
 int execute_command(char *command, bool *running);
 
